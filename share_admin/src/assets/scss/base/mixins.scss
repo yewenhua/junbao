@@ -1,0 +1,38 @@
+//应尽量减少Mixins的使用， @include定义好的Mixins和在CSS代码中复制、粘贴没什么不一样
+@mixin border-radius($arc) {
+  -moz-border-radius: $arc;
+  -webkit-border-radius: $arc;
+  border-radius: $arc;
+}
+@mixin btn-background($btn-background) {
+  @extend %btn;
+  background-color: $btn-background;
+  &:hover {
+    background-color: lighten($btn-background,10%);
+  }
+}
+
+//$height参数的值默认情况之下和$width具有相同的值
+@mixin size($width, $height: $width) {
+  width: $width;
+  height: $height;
+}
+
+//字体大小，颜色
+@mixin font-size-color($size, $color){
+  font-size: $size;
+  color: $color;
+}
+
+@mixin border-1px($color){
+  position: relative;
+  &:after{
+    content: "";
+    display: block;
+    position: absolute;
+    width: 100%;
+    left:0px;
+    bottom:0px;
+    border-top:1px solid $color;
+  }
+}
