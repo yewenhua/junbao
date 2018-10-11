@@ -1,0 +1,13 @@
+<?php namespace App\Facades;
+
+use Illuminate\Support\Facades\Facade;
+
+class WechatServiceFacade extends Facade {
+
+    protected static function getFacadeAccessor() {
+        //创建一个facade，可以将某个service注册个门面，这样，使用的时候就不需要麻烦地use 了
+        //返回服务容器绑定类的别名
+        return 'WechatService'; //service privider 里返回的实例名称
+    }
+
+}
