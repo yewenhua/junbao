@@ -100,6 +100,11 @@ class WechatController extends Controller
                                 );
                                 $this->returnNews($return);
                                 break;
+                            case 'V1004_HELP':
+                                $json = '{"content":"使用步骤:\n1、打开微信扫一扫，扫码设备上的二维码\n2、付款成功后点击完成，获取5位数密码\n3、在设备上输入密码，成功开启充电\n(如设备中途断电，时间还未用完，再次使用时只需扫码输入上次的密码继续充电。)\n服务热线:\n135 0745 0473\n0731-85783965"}';
+                                $json = json_decode($json, true);
+                                $this->returnTxt($json['content']);
+                                break;
                             case 'V2001_JOINUS':
                                 //多图文消息
                                 $urlOne = "http://mp.weixin.qq.com/s?__biz=MzAxNDE3NzAwNA==&mid=2451942587&idx=1&sn=b6c980edd0c9b621093a18104baae6df&scene=4#wechat_redirect";
@@ -255,6 +260,11 @@ class WechatController extends Controller
                     $keyword = $postObj->Content;
                     if (strstr($keyword, "投诉") || strstr($keyword, "您好") || strstr($keyword, "你好") || strstr($keyword, "有人在吗") || strstr($keyword, "在吗") || strstr($keyword, "有人吗")){
 
+                    }
+                    elseif (strstr($keyword, "密码")){
+                        $json = '{"content":"在使用过程中，若中途忘记密码，重新扫描机器二维码(无需付款)即可自动弹出密码页面，输入密码继续充电"}';
+                        $json = json_decode($json, true);
+                        $this->returnTxt($json['content']);
                     }
                     break;
                 case 'location':
@@ -428,7 +438,7 @@ class WechatController extends Controller
     }
 
     private function subscribe($param){
-        $json = '{"content":"欢迎您！\n感谢关注骏宝闪充"}';
+        $json = '{"content":"你好，感谢您关注骏宝闪充共享充电器！\n机器使用步骤:\n1、打开微信扫一扫，扫码设备上的二维码\n2、付款成功后点击完成，获取5位数密码\n3、在设备上输入密码，成功开启充电\n(如设备中途断电，时间还未用完，再次使用时只需扫码输入上次的密码继续充电。)\n服务热线:\n135 0745 0473\n0731-85783965"}';
         $json = json_decode($json, true);
         $this->returnTxt($json['content']);
     }

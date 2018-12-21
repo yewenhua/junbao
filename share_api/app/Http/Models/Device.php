@@ -10,7 +10,7 @@ class Device extends Model
     use SoftDeletes;
 
     protected  $table = 'devices';
-    protected $fillable = ['type', 'uid', 'brand', 'sn', 'isopen', 'category', 'address', 'location']; //批量赋值
+    protected $fillable = ['type', 'uid', 'brand', 'sn', 'isopen', 'category', 'address', 'location', 'active_time']; //批量赋值
     protected  $dates = ['deleted_at'];  //添加软删除
 
     public function findByDid($did)

@@ -46,8 +46,14 @@ class DeviceController extends Controller
         $offset = ($page - 1) * $limit;
         $like = '%'.$search.'%';
 
-        $total = Device::where('sn', 'like', $like);
-        $lists = Device::where('sn', 'like', $like);
+        $total = Device::select(['id'])->whereNull('deleted_at');
+        $lists = Device::whereNull('deleted_at');
+
+        if($search){
+            $total = $total->where('sn', 'like', $like);
+            $lists = $lists->where('sn', 'like', $like);
+        }
+
         if($type != 'all'){
             $total = $total->where('type', $type);
             $lists = $lists->where('type', $type);
@@ -77,13 +83,15 @@ class DeviceController extends Controller
                 $query->select('*')
                     ->from('orders')
                     ->whereRaw('orders.device_id = devices.id')
-                    ->where('status', self::PAYED);
+                    ->where('orders.status', self::PAYED)
+                    ->where('orders.money', '>=', 3);
             });
             $lists = $lists->whereExists(function ($query) {
                 $query->select('*')
                     ->from('orders')
                     ->whereRaw('orders.device_id = devices.id')
-                    ->where('status', self::PAYED);
+                    ->where('orders.status', self::PAYED)
+                    ->where('orders.money', '>=', 3);
             });
         }
         else if($isactive == 'no'){
@@ -91,18 +99,18 @@ class DeviceController extends Controller
                 $query->select('*')
                     ->from('orders')
                     ->whereRaw('orders.device_id = devices.id')
-                    ->where('status', self::PAYED);
+                    ->where('orders.status', self::PAYED)
+                    ->where('orders.money', '>=', 3);
             });
             $lists = $lists->whereNotExists(function ($query) {
                 $query->select('*')
                     ->from('orders')
                     ->whereRaw('orders.device_id = devices.id')
-                    ->where('status', self::PAYED);
+                    ->where('orders.status', self::PAYED)
+                    ->where('orders.money', '>=', 3);
             });
         }
-
-        $total = $total->orderBy('id', 'desc')
-            ->get();
+        $total = $total->orderBy('id', 'desc')->count();
 
         $lists = $lists->orderBy('id', 'desc')
             ->offset($offset)
@@ -145,11 +153,14 @@ class DeviceController extends Controller
                 else{
                     $lists[$key]->username = '未分配';
                 }
-
-                $orders = Order::whereNull('deleted_at')->where('status', self::PAYED)->where('device_id', $item->id)->get();
+                $orders = Order::whereNull('deleted_at')->where('status', self::PAYED)->where('device_id', $item->id)->where('money', '>=', 3)->get();
                 $order_num = $orders ? count($orders) : 0;
+                $lists[$key]->active_time = '--';
+                if($order_num > 0){
+                    $active_order = Order::whereNull('deleted_at')->where('status', self::PAYED)->where('device_id', $item->id)->orderBy('id', 'desc')->first();
+                    $lists[$key]->active_time = $active_order ? $active_order->pay_time : '--';
+                }
                 $lists[$key]->active = $order_num >= 1 ? 1 : 0;
-
                 $item->ptpls;
                 $img = 'qrcode_'.$item->sn;
                 $this->createimg($item->sn);
@@ -158,12 +169,159 @@ class DeviceController extends Controller
 
             $res = array(
                 'data'=>$lists,
-                'total'=>count($total)
+                'total'=>$total
             );
             return UtilService::format_data(self::AJAX_SUCCESS, '获取成功', $res);
         }
         else{
             return UtilService::format_data(self::AJAX_FAIL, '获取失败', '');
+        }
+    }
+
+    public function snExcel(Request $request){
+        $user = JWTAuth::parseToken()->authenticate();
+        $search = $request->input('search');
+        $uid = $request->input('uid');
+        $type = $request->input('type');
+        $brand = $request->input('brand');
+        $isactive = $request->input('isactive');
+        $like = '%'.$search.'%';
+
+        $lists = Device::select(['id', 'sn', 'uid'])->whereNull('deleted_at');
+
+        if($search){
+            $lists = $lists->where('sn', 'like', $like);
+        }
+
+        if($type != 'all'){
+            $lists = $lists->where('type', $type);
+        }
+
+        if($brand != 'all'){
+            $lists = $lists->where('brand', $brand);
+        }
+
+        if($uid != 'all' && $uid && $uid != 2 && $uid != 'agent'){
+            $ids = $this->pids($uid);
+            $lists = $lists->whereIn('uid', $ids);
+        }
+        else if($uid == 2){
+            $lists = $lists->whereIn('uid', array(0, 2));
+        }
+        else if($uid == 'agent'){
+            $lists = $lists->where('uid', $user->id);
+        }
+
+        if($isactive == 'yes'){
+            $lists = $lists->whereExists(function ($query) {
+                $query->select('*')
+                    ->from('orders')
+                    ->whereRaw('orders.device_id = devices.id')
+                    ->where('status', self::PAYED);
+            });
+        }
+        else if($isactive == 'no'){
+            $lists = $lists->whereNotExists(function ($query) {
+                $query->select('*')
+                    ->from('orders')
+                    ->whereRaw('orders.device_id = devices.id')
+                    ->where('status', self::PAYED);
+            });
+        }
+        $lists = $lists->orderBy('id', 'desc')->get();
+
+        if($lists){
+            $data = array();
+            $data[] = ['序号', '代理商', '设备SN'];
+            foreach ($lists as $key=>$item){
+                if($item->uid) {
+                    $agent = User::where('id', $item->uid)->first();
+                    if($agent && $agent->router){
+                        //路径剔除管理员
+                        $r_arr = explode(',', $agent->router);
+                        if(in_array(config('user.admin_id'), $r_arr)){
+                            for($i=0; $i<count($r_arr); $i++){
+                                if($r_arr[$i] == config('user.admin_id')){
+                                    array_splice($r_arr, $i, 1);
+                                    break;
+                                }
+                            }
+                        }
+
+                        $username = '';
+                        foreach ($r_arr as $sub){
+                            $u = User::where('id', $sub)->first();
+                            if($username && $u){
+                                $username = $username . '->' . $u->name;
+                            }
+                            elseif($u){
+                                $username = $u->name;
+                            }
+                        }
+
+                        $lists[$key]->username = $username;
+                    }
+                    else{
+                        $lists[$key]->username = $agent ? $agent->name : '';
+                    }
+                }
+                else{
+                    $lists[$key]->username = '未分配';
+                }
+
+                $data[] = [$key +1, $item->username, $item->sn];
+            }
+
+            $filename = '设备SN列表'.date('YmdHis');
+            Excel::create($filename, function($excel)use($data) {
+                $excel->sheet('设备SN列表', function($sheet)use($data) {
+                    $startRow = 2;
+                    $startCell = 'B2';
+                    $sheet->fromArray($data, null, $startCell);
+
+                    foreach ($data as $key=>$item){
+                        $num = ($key + $startRow + 1);
+                        $range = 'B'.$num.':D'.$num;
+                        if($key%2 == 0){
+                            $sheet->cells($range, function($cells) {
+                                $cells->setBackground('#ffffff');
+                                $cells->setFontColor('#000000');
+                                $cells->setAlignment('center');
+                            });
+                        }
+                        else{
+                            $sheet->cells($range, function($cells) {
+                                $cells->setBackground('#fafafa');
+                                $cells->setFontColor('#333333');
+                                $cells->setAlignment('center');
+                            });
+                        }
+                    }
+
+                    $endRow = count($data) + 2;
+                    $range = 'B2:D'.$endRow;
+                    $sheet->setBorder($range, 'thin');
+                    $sheet->setWidth(array(
+                        'A'     =>  5,
+                        'B'     =>  5,
+                        'C'     =>  55,
+                        'D'     =>  20
+                    ));
+
+                    $sheet->mergeCells('B2:D2');
+
+                    $sheet->cell('B2', function($cell) {
+                        $cell->setValue('设备SN列表');
+                        $cell->setBackground('#bdbdbd');
+                        $cell->setFontColor('#333333');
+                        $cell->setFontSize(16);
+                        $cell->setFontWeight('bold');
+                        $cell->setAlignment('center');
+                        $cell->setValignment('center');
+                    });
+                });
+
+            })->export('xlsx');
         }
     }
 
@@ -231,11 +389,10 @@ class DeviceController extends Controller
                             $obj->deletePtpl($ptpl);
                         }
 
-                        if (!$flag) {
-                            $obj->uid = $user->id;
+                        if(count($id_arr) <= 1 && $uid && $uid != 'all') {
+                            //$obj->uid = $uid;
                         }
 
-                        $obj->uid = $uid;
                         $obj->type = $type;
                         $obj->brand = $brand;
                         $obj->category = $category;
@@ -333,7 +490,7 @@ class DeviceController extends Controller
 
         $total = DB::table('devices')
             ->join('orders', 'devices.id', '=', 'orders.device_id')
-            ->select('orders.*', 'devices.brand', 'devices.type', 'devices.sn', 'devices.category')
+            ->select('orders.id', 'devices.brand', 'devices.type', 'devices.sn', 'devices.category')
             ->where('orders.status', self::PAYED);
 
         $lists = DB::table('devices')
@@ -372,7 +529,7 @@ class DeviceController extends Controller
         }
 
         $total = $total->orderBy('orders.id', 'desc')
-            ->get();
+            ->count();
 
         $lists = $lists->orderBy('orders.id', 'desc')
             ->offset($offset)
@@ -413,7 +570,7 @@ class DeviceController extends Controller
             }
             $res = array(
                 'data'=>$lists,
-                'total'=>count($total)
+                'total'=>$total
             );
             return UtilService::format_data(self::AJAX_SUCCESS, '获取成功', $res);
         }
@@ -1266,34 +1423,57 @@ class DeviceController extends Controller
         }
     }
 
+    /**
+     * 批量解除设备
+     * @param Request $request
+     * @return mixed
+     */
     public function batchcancel(Request $request){
         $user = JWTAuth::parseToken()->authenticate();
         $roles = $user->roles;
-        $flag = false;
         $uid = $user->id;
+        $flag = false;
         foreach ($roles as $role){
             if($role->name == '管理员'){
                 $flag = true;
                 $uid = 0;
                 break;
             }
+            elseif(strpos($role->name, '运营') !== false || strpos($role->name, '市场维护') !== false){
+                $flag = true;
+                $uid = $user->owner_id;
+                if($uid == config('user.admin_id')){
+                    $uid = 0;
+                }
+                break;
+            }
+            elseif(strpos($role->name, '代理商') !== false){
+                $flag = true;
+                $uid = $user->id;
+                break;
+            }
         }
 
-        $idstring = $request->input('idstring');
-        $this->validate(request(), [
-            'idstring'=>'required|min:1'
-        ]);
+        if($flag) {
+            $idstring = $request->input('idstring');
+            $this->validate(request(), [
+                'idstring' => 'required|min:1'
+            ]);
 
-        $idarray = explode(',', $idstring);
-        $res = Device::whereIn('id', $idarray)->update([
-            'uid' => $uid,
-            'isopen' => 0
-        ]);
-        if($res){
-            return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $res);
+            $idarray = explode(',', $idstring);
+            $res = Device::whereIn('id', $idarray)->update([
+                'uid' => $uid,
+                'isopen' => 0
+            ]);
+            if ($res) {
+                return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $res);
+            }
+            else {
+                return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
+            }
         }
         else{
-            return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
+            return UtilService::format_data(self::AJAX_FAIL, '没有权限', '');
         }
     }
 
@@ -1305,28 +1485,6 @@ class DeviceController extends Controller
 
         $idarray = explode(',', $idstring);
         $res = Password::whereIn('device_id', $idarray)->delete();
-        if($res){
-            return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $res);
-        }
-        else{
-            return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
-        }
-    }
-
-    public function batchassign(Request $request){
-        $user = JWTAuth::parseToken()->authenticate();
-        $idstring = $request->input('idstring');
-        $child_id = $request->input('child_id');
-        $this->validate(request(), [
-            'idstring'=>'required|min:1',
-            'child_id'=>'required'
-        ]);
-
-        $idarray = explode(',', $idstring);
-        $res = Device::whereIn('id', $idarray)->where("uid", $user->id)->update([
-            "uid"=>$child_id,
-            "updated_at"=>date('Y-m-d H:i:s')
-        ]);
         if($res){
             return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $res);
         }
@@ -1394,73 +1552,94 @@ class DeviceController extends Controller
         );
     }
 
+    /**
+     * 批量自定义分配设备
+     * @param Request $request
+     * @return mixed
+     */
     public function diyassign(Request $request){
         $user = JWTAuth::parseToken()->authenticate();
         $roles = $user->roles;
         $flag = false;
+        $is_admin = false;
+        $owner_id = 0;
         foreach ($roles as $role){
             if($role->name == '管理员'){
                 $flag = true;
+                $is_admin = true;
+                break;
+            }
+            elseif(strpos($role->name, '运营') !== false || strpos($role->name, '市场维护') !== false){
+                $flag = true;
+                $owner_id = $user->owner_id;
+                break;
+            }
+            elseif(strpos($role->name, '代理商') !== false){
+                $flag = true;
+                $owner_id = $user->id;
                 break;
             }
         }
 
-        $dObj = new Device();
-        $type = $request->input('type');
-        $start = $request->input('start');
-        $end = $request->input('end');
-        $sn = $request->input('sn');
-        $uid = $request->input('uid');
-        if($type == 2 && $sn){
-            $sn_arr = explode(' ', $sn);
-            $new_arr = array();
-            foreach ($sn_arr as $item) {
-                if($item) {
-                    $new_arr[] = $item;
-                    $row = $dObj->isSnExist($item);
-                    if(!$row){
-                        return UtilService::format_data(self::AJAX_FAIL, 'SN:'.$item.'不存在', '');
-                        break;
+        if($flag) {
+            $dObj = new Device();
+            $type = $request->input('type');
+            $start = $request->input('start');
+            $end = $request->input('end');
+            $sn = $request->input('sn');
+            $uid = $request->input('uid');
+            if ($type == 2 && $sn && $uid) {
+                $sn_arr = explode(' ', $sn);
+                $new_arr = array();
+                foreach ($sn_arr as $item) {
+                    if ($item) {
+                        $new_arr[] = $item;
+                        $row = $dObj->isSnExist($item);
+                        if (!$row) {
+                            return UtilService::format_data(self::AJAX_FAIL, 'SN:' . $item . '不存在', '');
+                            break;
+                        }
                     }
                 }
+
+                if ($is_admin) {
+                    $res = Device::whereIn('sn', $new_arr)->update([
+                        "uid" => $uid,
+                        "updated_at" => date('Y-m-d H:i:s')
+                    ]);
+                }
+                else {
+                    $res = Device::whereIn('sn', $new_arr)->where("uid", $owner_id)->update([
+                        "uid" => $uid,
+                        "updated_at" => date('Y-m-d H:i:s')
+                    ]);
+                }
+            } elseif ($type == 1 && $start && $end && $uid) {
+                if ($is_admin) {
+                    $res = Device::where('sn', '>=', $start)->where('sn', '<=', $end)->update([
+                        "uid" => $uid,
+                        "updated_at" => date('Y-m-d H:i:s')
+                    ]);
+                }
+                else {
+                    $res = Device::where('sn', '>=', $start)->where('sn', '<=', $end)->where("uid", $owner_id)->update([
+                        "uid" => $uid,
+                        "updated_at" => date('Y-m-d H:i:s')
+                    ]);
+                }
+            } else {
+                return UtilService::format_data(self::AJAX_FAIL, '参数错误', '');
             }
 
-            if($flag){
-                $res = Device::whereIn('sn', $new_arr)->update([
-                    "uid"=>$uid,
-                    "updated_at"=>date('Y-m-d H:i:s')
-                ]);
+            if ($res) {
+                return UtilService::format_data(self::AJAX_SUCCESS, '成功分配 '.$res.' 台设备', $res);
             }
-            else{
-                $res = Device::whereIn('sn', $new_arr)->where("uid", $user->id)->update([
-                    "uid"=>$uid,
-                    "updated_at"=>date('Y-m-d H:i:s')
-                ]);
-            }
-        }
-        elseif($type == 1 && $start && $end){
-            if($flag){
-                $res = Device::where('sn', '>=', $start)->where('sn', '<=', $end)->update([
-                    "uid"=>$uid,
-                    "updated_at"=>date('Y-m-d H:i:s')
-                ]);
-            }
-            else{
-                $res = Device::where('sn', '>=', $start)->where('sn', '<=', $end)->where("uid", $user->id)->update([
-                    "uid"=>$uid,
-                    "updated_at"=>date('Y-m-d H:i:s')
-                ]);
+            else {
+                return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
             }
         }
         else{
-            return UtilService::format_data(self::AJAX_FAIL, '参数错误', '');
-        }
-
-        if($res){
-            return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $res);
-        }
-        else{
-            return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
+            return UtilService::format_data(self::AJAX_FAIL, '没有权限', '');
         }
     }
 

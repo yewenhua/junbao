@@ -24,6 +24,7 @@ class CreateDevicesTable extends Migration
             $table->string('location');
             $table->string('address');
             $table->integer('isopen');
+            $table->dateTime('active_time')->default(null)->nullable();
             $table->timestamps();
             $table->softDeletes(); //添加软删除
         });

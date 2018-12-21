@@ -4,10 +4,11 @@
         <div class="pageWrapper">
             <div class="lookWrapper" v-if="!edit">
                 <div class="searchWrapper">
-                    <el-input placeholder="请输入内容" v-model="searchkey" size="medium">
-                        <el-button slot="append" size="medium" icon="el-icon-search" @click="search">搜索</el-button>
+                    <el-input placeholder="请输入内容" v-model="searchkey" size="small">
+                        <el-button slot="append" size="small" icon="el-icon-search" @click="search">搜索</el-button>
                     </el-input>
-                    <el-button type="primary" size="medium" class="addBtn" icon="el-icon-plus" @click="addUser" v-if="hasPermission('admin/myagents', 'add')">添加用户</el-button>
+                    <span style="margin-left: 5px;">总营业额：{{totalMoney}}元，总设备数：{{total_devices_num}}，总激活数：{{total_active_device_num}}，总激活率：{{total_active_device_rate}}%，24H激活率：{{total_recent_active_rate}}%，24H使用率：{{total_recent_use_rate}}%</span>
+                    <el-button type="primary" size="small" class="addBtn" icon="el-icon-plus" @click="addUser" v-if="hasPermission('admin/myagents', 'add')">添加用户</el-button>
                 </div>
                 <el-table
                         :data="tableData"
@@ -61,13 +62,50 @@
                         </template>
                     </el-table-column>
                     <el-table-column
+                            prop="created_at"
+                            width="100"
+                            label="投放时间">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.created_at.substring(0,10)}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
                             prop="device_num"
                             width="65"
                             label="设备数">
                     </el-table-column>
                     <el-table-column
-                            prop="clear_money"
-                            label="已结算（元）">
+                            prop="active_num"
+                            width="65"
+                            label="激活数">
+                    </el-table-column>
+                    <el-table-column
+                            prop="active_device_rate"
+                            width="65"
+                            label="激活率">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.active_device_rate + '%'}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="recent_active_rate"
+                            width="65"
+                            label="近一天激活率">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.recent_active_rate + '%'}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="recent_use_rate"
+                            width="65"
+                            label="近一天使用率">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.recent_use_rate + '%'}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="operate_money"
+                            label="营业额（元）">
                     </el-table-column>
                     <el-table-column
                             prop="unclear_money"
@@ -75,6 +113,10 @@
                         <template slot-scope="scope">
                             <div>{{scope.row.unclear_money + scope.row.freeze_money}}</div>
                         </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="clear_money"
+                            label="已结算（元）">
                     </el-table-column>
                     <el-table-column label="操作" width="75" v-if="hasPermission('admin/myagents', 'update') || hasPermission('admin/myagents', 'delete')">
                         <template slot-scope="scope">
@@ -224,6 +266,12 @@
                 total: 1,
                 searchkey: '',
                 loading: false,
+                totalMoney: 0,
+                total_devices_num: 0,
+                total_active_device_num: 0,
+                total_active_device_rate: 0,
+                total_recent_active_rate: 0,
+                total_recent_use_rate: 0,
                 edit: false,
                 activeUserId: '',
                 activeUserName: '',
@@ -363,6 +411,12 @@
                         if(response.data.code == 0){
                             that.tableData = response.data.data.data;
                             that.total = response.data.data.total;
+                            that.totalMoney = response.data.data.all_money;
+                            that.total_devices_num = response.data.data.total_devices_num;
+                            that.total_active_device_num = response.data.data.total_active_device_num;
+                            that.total_active_device_rate = response.data.data.total_active_device_rate;
+                            that.total_recent_active_rate = response.data.data.total_recent_active_rate;
+                            that.total_recent_use_rate = response.data.data.total_recent_use_rate;
                         }
                         that.loading = false;
                     })

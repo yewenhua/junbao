@@ -14,7 +14,8 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         //add by send mail command
-        Commands\SendEmail::class
+        Commands\SendEmail::class,
+        Commands\ActiveTime::class
     ];
 
     /**
@@ -25,8 +26,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')
-        //          ->hourly();
+        $schedule->command('activetime:update')->everyMinute();
     }
 
     /**

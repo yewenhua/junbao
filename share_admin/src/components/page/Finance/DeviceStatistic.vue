@@ -4,7 +4,7 @@
         <div class="pageWrapper">
             <div class="lookWrapper">
                 <div class="searchWrapper">
-                    <el-select v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
+                    <el-select filterable v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
                         <el-option key="全部用户" label="全部用户" value="all" v-if="usertype=='admin'"></el-option>
                         <el-option
                                 v-for="item in agents"
@@ -218,12 +218,16 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
-                            console.log(response.data.data.data);
                             that.tableData = response.data.data.data;
                             that.total = response.data.data.total;
                         }
-                        that.loading = false;
+                        else{
+                            Message.warning({
+                                message: response.data.message
+                            });
+                        }
                     })
                     .catch(function (error) {
                         Message.error({
@@ -264,6 +268,7 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.agents = response.data.data.list;
                             that.usertype = response.data.data.type;
@@ -273,7 +278,11 @@
                             }
                             that.lists();
                         }
-                        that.loading = false;
+                        else{
+                            Message.warning({
+                                message: response.data.message
+                            });
+                        }
                     })
                     .catch(function (error) {
                         Message.error({

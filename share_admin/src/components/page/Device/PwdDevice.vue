@@ -4,8 +4,9 @@
         <div class="pageWrapper">
             <div class="lookWrapper" v-show="!edit">
                 <div class="searchWrapper">
-                    <el-select v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
+                    <el-select filterable v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
                         <el-option key="全部用户" label="全部用户" value="all" v-if="usertype=='admin'"></el-option>
+                        <el-option key="管理员" label="管理员" value="2" v-if="usertype=='admin'"></el-option>
                         <el-option :key="selfName" :label="selfName" value="agent" v-if="usertype=='agent'"></el-option>
                         <el-option
                                 v-for="item in agents"
@@ -40,7 +41,8 @@
                     <el-input placeholder="设备编号" v-model="searchkey" size="medium" style="width: 210px;">
                         <el-button slot="append" size="medium" icon="el-icon-search" @click="search">搜索</el-button>
                     </el-input>
-                    <el-button type="primary" size="small" icon="el-icon-download" @click="zip" v-if="hasPermission('admin/pwddevice', 'read')">下载二维码</el-button>
+                    <el-button type="primary" size="small" icon="el-icon-download" @click="zip" v-if="hasPermission('admin/pwddevice', 'read')">二维码</el-button>
+                    <el-button type="success" size="small" icon="el-icon-tickets" @click="excel" v-if="hasPermission('admin/pwddevice', 'read')">导出SN</el-button>
                     <el-button type="primary" size="small" class="addBtn" icon="el-icon-plus" @click="add" v-if="hasPermission('admin/pwddevice', 'add') && usertype=='admin'">添加</el-button>
                 </div>
                 <el-table
@@ -59,8 +61,9 @@
                             width="50">
                     </el-table-column>
                     <el-table-column
-                            type="index"
-                            :index="indexMethod">
+                            prop="sn"
+                            label="设备编号"
+                            width="100">
                     </el-table-column>
                     <el-table-column
                             prop="type"
@@ -73,20 +76,15 @@
                             width="120">
                     </el-table-column>
                     <el-table-column
-                            prop="sn"
-                            label="设备编号">
-                    </el-table-column>
-                    <el-table-column
                             prop="username"
                             label="所属代理商">
                     </el-table-column>
                     <el-table-column
                             prop="address"
                             label="摆放位置">
-                    </el-table-column>
-                    <el-table-column
-                            prop="location"
-                            label="场地名称">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.address && scope.row.location ? scope.row.address + '->' + scope.row.location : scope.row.address && !scope.row.location ? scope.row.address : !scope.row.address && scope.row.location ? scope.row.location : '--'}}</div>
+                        </template>
                     </el-table-column>
                     <el-table-column
                             prop="isopen"
@@ -97,11 +95,19 @@
                         </template>
                     </el-table-column>
                     <el-table-column
-                            prop="isopen"
+                            prop="active"
                             label="是否激活"
                             width="80">
                         <template slot-scope="scope">
                             <div class="status" :class="scope.row.active == 1 ? 'active' : 'unactive'">{{scope.row.active == 1 ? '已激活' : '未激活'}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="active_time"
+                            label="激活时间"
+                            width="100">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.active_time ? scope.row.active_time.substring(0, 10) : ''}}</div>
                         </template>
                     </el-table-column>
                     <el-table-column
@@ -152,7 +158,7 @@
                             <el-input type="textarea" :rows="3" v-model="ruleAssignForm.sn" placeholder="请输入设备编号（多个请按空格隔开）"></el-input>
                         </el-form-item>
                         <el-form-item label="分配用户" prop="uid" v-if="usertype=='admin'">
-                            <el-select v-model="ruleAssignForm.uid" placeholder="代理商" size="medium" style="width: 200px;">
+                            <el-select filterable v-model="ruleAssignForm.uid" placeholder="代理商" size="medium" style="width: 200px;">
                                 <el-option
                                         v-for="item in agents"
                                         :key="item.id"
@@ -181,7 +187,7 @@
             <div class="updateWrapper device" v-show="edit" v-if="hasPermission('admin/pwddevice', 'update')">
                 <div class="title">请填写以下信息</div>
                 <el-form :model="ruleForm" :rules="rules" ref="ruleForm" label-width="100px" class="demo-ruleForm" label-position="top" v-loading="loading">
-                    <el-form-item label="代理商" prop="uid">
+                    <el-form-item label="代理商" prop="uid" v-if="!batch && 1==2">
                         <el-select v-model="ruleForm.uid" placeholder="请选择" style="width: 100%;">
                             <el-option key="不分配" label="不分配" :value="0" v-if="usertype=='admin'"></el-option>
                             <el-option
@@ -292,7 +298,7 @@
 
     export default {
         computed: {
-            ...mapState(["domainUrl", 'baseURL', 'typeOptions', 'brandOptions', 'userInfo']),
+            ...mapState(["domainUrl", 'baseURL', 'typeOptions', 'brandOptions', 'userInfo', 'token']),
         },
         data(){
             return {
@@ -384,10 +390,44 @@
                 this.ruleForm.isopen = true;
                 this.getPtpl();
             },
+            distinct(arr){
+                let rep_arr = [];
+                let final_arr = [];
+                var i, j, len = arr.length;
+                for(i = 0; i < len; i++){
+                    for(j = i + 1; j < len; j++){
+                        if(arr[i] == arr[j]){
+                            rep_arr.push(arr[j]);
+                            arr.splice(j,1);
+                            len--;
+                            j--;
+                        }
+                    }
+                }
+
+                final_arr = arr;
+
+                return {
+                    rep_arr: rep_arr,
+                    final_arr: final_arr
+                };
+            },
             submitForm(formName) {
                 var that = this;
                 this.$refs[formName].validate((valid) => {
                     if (valid) {
+                        if(that.ruleForm.sn && String(that.ruleForm.sn).indexOf(' ')) {
+                            let arr = String(that.ruleForm.sn).split(' ');
+                            let res = that.distinct(arr);
+                            if(res.rep_arr.length > 0){
+                                let idstr = res.rep_arr.join(',');
+                                Message.warning({
+                                    message: 'SN重复：' + idstr
+                                });
+                                return false;
+                            }
+                        }
+
                         checkToken(function () {
                             that.loading = true;
                             that.axios.post('/devices/store', {
@@ -435,6 +475,7 @@
                             });
                         });
                     } else {
+                        that.batch = false;
                         return false;
                     }
                 });
@@ -460,11 +501,16 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.tableData = response.data.data.data;
                             that.total = response.data.data.total;
                         }
-                        that.loading = false;
+                        else{
+                            Message.warning({
+                                message: response.data.message
+                            });
+                        }
                     })
                     .catch(function (error) {
                         Message.error({
@@ -519,7 +565,7 @@
                 var that = this;
                 if(that.multipleSelection.length <= 0){
                     Message.warning({
-                        message: '请选择要删除的选项'
+                        message: '请选择要编辑的选项'
                     });
                     return false;
                 }
@@ -795,6 +841,7 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.agents = response.data.data.list;
                             that.usertype = response.data.data.type;
@@ -806,7 +853,11 @@
                             }
                             that.lists();
                         }
-                        that.loading = false;
+                        else{
+                            Message.warning({
+                                message: response.data.message
+                            });
+                        }
                     })
                     .catch(function (error) {
                         Message.error({
@@ -826,6 +877,7 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.children = response.data.data;
                             if(that.children.length > 0){
@@ -838,7 +890,6 @@
                                 });
                             }
                         }
-                        that.loading = false;
                     })
                     .catch(function (error) {
                         Message.error({
@@ -874,6 +925,19 @@
                         });
                         return false;
                     }
+                    else{
+                        if(String(that.ruleAssignForm.sn).indexOf(' ')) {
+                            let arr = String(that.ruleAssignForm.sn).split(' ');
+                            let res = that.distinct(arr);
+                            if(res.rep_arr.length > 0){
+                                let idstr = res.rep_arr.join(',');
+                                Message.warning({
+                                    message: 'SN重复：' + idstr
+                                });
+                                return false;
+                            }
+                        }
+                    }
                 }
 
                 if(!that.ruleAssignForm.uid){
@@ -900,7 +964,7 @@
                                 if (response.data.code == 0) {
                                     that.dialogAssignVisible  = false;
                                     Message.success({
-                                        message: '操作成功'
+                                        message: response.data.message
                                     });
 
                                     that.ruleAssignForm.start = '';
@@ -932,6 +996,10 @@
                 this.total = 1;
                 this.tableData = [];
                 this.lists()
+            },
+            excel(){
+                let url = this.baseURL + "devices/snexcel?search=" + this.searchkey + '&type=' + this.searchType + '&brand=' + this.searchBrand + '&uid=' + this.searchUid + '&isactive=' + this.isActive + '&token=' + this.token.value + '&path=' + encodeURIComponent(aesencode('admin/pwddevice')) + '&privilege=' + encodeURIComponent(aesencode('read'));
+                window.open(url);
             }
         },
         components: {

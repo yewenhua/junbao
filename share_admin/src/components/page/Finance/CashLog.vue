@@ -4,7 +4,7 @@
         <div class="pageWrapper">
             <div class="lookWrapper">
                 <div class="searchWrapper">
-                    <el-select v-if="usertype=='admin'" v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
+                    <el-select filterable v-if="usertype=='admin'" v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
                         <el-option key="全部用户" label="全部用户" value="all"></el-option>
                         <el-option
                                 v-for="item in agents"
@@ -13,7 +13,7 @@
                                 :value="item.id">
                         </el-option>
                     </el-select>
-                    <div class="rest-money" v-loading="moneying" style="margin-left: 10px;">营业额： <span class="value">{{sale_money}}</span>元，<span v-if="searchUid != 'all'">可用余额： <span class="value">{{rest_money}}</span>元，</span>冻结金额： <span class="freeze">{{freeze_money}}</span>元，已提现金额： <span class="take">{{take_money}}</span>元</div>
+                    <div class="rest-money" v-loading="moneying" style="margin-left: 10px;"><span v-if="usertype=='admin'">营业额： <span class="value">{{sale_money}}</span>元，</span><span v-if="searchUid != 'all'">可用余额： <span class="value">{{rest_money}}</span>元，</span>冻结金额： <span class="freeze">{{freeze_money}}</span>元，已提现金额： <span class="take">{{take_money}}</span>元</div>
                     <el-button type="primary" size="medium" class="takeCashBtn" :disabled="rest_money<=0" @click="takecash" v-if="freeze_money <=0 && rest_money > 0 && hasPermission('admin/cashlog', 'update') && usertype=='agent'">提现</el-button>
                 </div>
                 <el-table
@@ -137,11 +137,16 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.tableData = response.data.data.data;
                             that.total = response.data.data.total;
                         }
-                        that.loading = false;
+                        else{
+                            Message.warning({
+                                message: response.data.message
+                            });
+                        }
                     })
                     .catch(function (error) {
                         Message.error({

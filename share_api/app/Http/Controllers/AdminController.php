@@ -13,6 +13,7 @@ use App\Order;
 use App\Role;
 use App\Http\Models\Discount;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
@@ -38,8 +39,9 @@ class AdminController extends Controller
         $offset = ($page - 1) * $limit;
         $like = '%' . $search . '%';
 
-        $total = \App\User::where('name', 'like', $like);
+        $total = \App\User::select(['id'])->where('name', 'like', $like);
         $users = \App\User::where('name', 'like', $like);
+        $all_money = Order::whereNull('deleted_at')->where('status', self::PAYED);
 
         if($roleid != 'all') {
             $role = Role::find($roleid);
@@ -51,15 +53,18 @@ class AdminController extends Controller
 
             $total = $total->whereIn('id', $idarray);
             $users = $users->whereIn('id', $idarray);
+            $all_money = $all_money->whereIn('uid', $idarray);
         }
 
         $total = $total->orderBy('id', 'desc')
-            ->get();
+            ->count();
 
         $users = $users->orderBy('id', 'desc')
             ->offset($offset)
             ->limit($limit)
             ->get();
+
+        $all_money = $all_money->sum('money');
 
         if ($users) {
             foreach ($users as $key=>$item) {
@@ -81,14 +86,20 @@ class AdminController extends Controller
 
                 if($item->type == 'agent' || $item->type == 'straight' || $item->type == 'admin') {
                     if($item->type == 'admin'){
-                        $devices = Device::whereNull('deleted_at')->whereIn('uid', array(0, config('user.admin_id')))->get();
-                        $orders = Order::whereNull('deleted_at')->whereIn('uid', array(0, config('user.admin_id')))->where('status', self::PAYED)->get();
+                        $devices_num = Device::select(['id'])->whereNull('deleted_at')->whereIn('uid', array(0, config('user.admin_id')))->count();
+                        $active_device_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->whereIn('uid', array(0, config('user.admin_id')))->count();
+                        $recent_active_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->whereIn('uid', array(0, config('user.admin_id')))->where('active_time', '>=', date('Y-m-d', time()-24*60*60))->count();
+                        $recent_use_num = Order::select(['device_id'])->distinct()->whereNull('deleted_at')->whereIn('uid', array(0, config('user.admin_id')))->where('pay_time', '>=', date('Y-m-d', time()-24*60*60))->where('status', self::PAYED)->where('money', '>=', 1)->count();
+                        $orders = Order::select(['cash_status', 'money'])->whereNull('deleted_at')->whereIn('uid', array(0, config('user.admin_id')))->where('status', self::PAYED)->get();
                         $users[$key]->discount = 100;
                     }
                     else {
-                        $devices = Device::whereNull('deleted_at')->where('uid', $item->id)->get();
                         $ids = $this->pids($item->id);
-                        $orders = Order::whereNull('deleted_at')->whereIn('uid', $ids)->where('status', self::PAYED)->get();
+                        $devices_num = Device::select(['id'])->whereNull('deleted_at')->whereIn('uid', $ids)->count();
+                        $active_device_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->whereIn('uid', $ids)->count();
+                        $recent_active_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->whereIn('uid', $ids)->where('active_time', '>=', date('Y-m-d', time()-24*60*60))->count();
+                        $recent_use_num = Order::select(['device_id'])->distinct()->whereNull('deleted_at')->whereIn('uid', $ids)->where('pay_time', '>=', date('Y-m-d', time()-24*60*60))->where('status', self::PAYED)->where('money', '>=', 1)->count();
+                        $orders = Order::select(['cash_status', 'money'])->whereNull('deleted_at')->whereIn('uid', $ids)->where('status', self::PAYED)->get();
                         $discount = Discount::whereNull('deleted_at')->where('uid', $item->id)->first();
                         if(!$discount){
                             $discount = Discount::whereNull('deleted_at')->where('uid', 0)->first();
@@ -96,12 +107,23 @@ class AdminController extends Controller
                         $users[$key]->discount = $discount ? $discount->value : 0;
                     }
 
-                    $users[$key]->device_num = $devices ? count($devices) : 0;
+                    $users[$key]->device_num = $devices_num;
+                    $active_device_rate = round(($devices_num > 0 ? $active_device_num*100/$devices_num : 0), 1);
+                    $recent_active_rate = round(($devices_num > 0 ? $recent_active_num*100/$devices_num : 0), 1);
+                    $recent_use_rate = round(($devices_num > 0 ? $recent_use_num*100/$devices_num : 0), 1);
+
+                    $users[$key]->active_num = $active_device_num;
+                    $users[$key]->active_device_rate = $active_device_rate;
+                    $users[$key]->recent_active_rate = $recent_active_rate;
+                    $users[$key]->recent_use_rate = $recent_use_rate;
+
+                    $operate_money = 0;
                     $clear_money = 0;
                     $unclear_money = 0;
                     $freeze_money = 0;
                     if($orders) {
                         foreach ($orders as $order) {
+                            $operate_money = $operate_money + $order['money'];
                             if ($order['cash_status'] == 0) {
                                 $unclear_money = $unclear_money + $order['money'];
                             } elseif ($order['cash_status'] == 1) {
@@ -111,23 +133,30 @@ class AdminController extends Controller
                             }
                         }
                     }
-                    $users[$key]->clear_money = $clear_money;
-                    $users[$key]->unclear_money = $unclear_money;
-                    $users[$key]->freeze_money = $freeze_money;
+                    $users[$key]->operate_money = round($operate_money, 2);
+                    $users[$key]->clear_money = round($clear_money, 2);
+                    $users[$key]->unclear_money = round($unclear_money, 2);
+                    $users[$key]->freeze_money = round($freeze_money, 2);
                 }
                 else{
+                    $users[$key]->operate_money = 0;
                     $users[$key]->device_num = 0;
                     $users[$key]->clear_money = 0;
                     $users[$key]->unclear_money = 0;
                     $users[$key]->freeze_money = 0;
                     $users[$key]->discount = 0;
+                    $users[$key]->active_num = 0;
+                    $users[$key]->active_device_rate = 0;
+                    $users[$key]->recent_active_rate = 0;
+                    $users[$key]->recent_use_rate = 0;
                 }
             }
 
             $res = array(
                 'user' => $userObj,
                 'data' => $users,
-                'total' => count($total)
+                'total' => $total,
+                'all_money' => $all_money
             );
             return UtilService::format_data(self::AJAX_SUCCESS, '获取成功', $res);
         } else {
@@ -491,27 +520,42 @@ class AdminController extends Controller
             $params['status'] = 0;
             $params['type'] = 'agent';
 
-            $res = \App\User::create($params); //save 和 create 的不同之处在于 save 接收整个 Eloquent 模型实例而 create 接收原生 PHP 数组
-            if ($res) {
-                if($maintenance->owner_id == config('user.admin_id')){
-                    //业务员属于平台
-                    $res->level = 2;
-                    $res->router = config('user.admin_id') . ',' . $res->id;
-                    $res->parent_id = config('user.admin_id');
-                }
-                else{
-                    //业务员属于代理商
-                    $res->level = $maintenance->level;
-                    if($maintenance->router){
-                        $arr = explode(',', $maintenance->router);
-                        $arr[count($arr) - 1] = $res->id;
-                        $res->router = implode(',', $arr);
+            $row = $obj->isMobileExist($phone);
+            if($row){
+                return UtilService::format_data(self::AJAX_FAIL, '该手机号码已存在或已软删除', '');
+            }
+            else {
+                DB::beginTransaction();
+                try {
+                    $res = \App\User::create($params); //save 和 create 的不同之处在于 save 接收整个 Eloquent 模型实例而 create 接收原生 PHP 数组
+                    if ($res) {
+                        if ($maintenance->owner_id == config('user.admin_id')) {
+                            //业务员属于平台
+                            $res->level = 2;
+                            $res->router = config('user.admin_id') . ',' . $res->id;
+                            $res->parent_id = config('user.admin_id');
+                            $role_id = config('user.role_agent_id');
+                        } else {
+                            //业务员属于代理商
+                            $res->level = $maintenance->level;
+                            if ($maintenance->router) {
+                                $arr = explode(',', $maintenance->router);
+                                $arr[count($arr) - 1] = $res->id;
+                                $res->router = implode(',', $arr);
+                            }
+                            $res->parent_id = $maintenance->owner_id;
+                            $role_id = config('user.role_child_id');
+                        }
+                        $role = \App\Role::find($role_id);
+                        $res->assignRole($role);  //要增加的角色
+                        $res->save();
                     }
-                    $res->parent_id = $maintenance->owner_id;
+                    DB::commit();
+                    return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', '');
+                } catch (QueryException $ex) {
+                    DB::rollback();
+                    return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
                 }
-                return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $res);
-            } else {
-                return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
             }
         }
         else{
@@ -605,6 +649,16 @@ class AdminController extends Controller
             ->limit($limit)
             ->get();
 
+        $ids = $this->pids($user->id);
+        $all_money = Order::whereNull('deleted_at')->where('status', self::PAYED)->whereIn('uid', $ids)->sum('money');
+        $total_devices_num = Device::select(['id'])->whereNull('deleted_at')->whereIn('uid', $ids)->count();
+        $total_active_device_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->whereIn('uid', $ids)->count();
+        $total_recent_active_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->whereIn('uid', $ids)->where('active_time', '>=', date('Y-m-d', time()-24*60*60))->count();
+        $total_recent_use_num = Order::select(['device_id'])->distinct()->whereNull('deleted_at')->whereIn('uid', $ids)->where('pay_time', '>=', date('Y-m-d', time()-24*60*60))->where('status', self::PAYED)->where('money', '>=', 1)->count();
+        $total_active_device_rate = round(($total_devices_num > 0 ? $total_active_device_num*100/$total_devices_num : 0), 1);
+        $total_recent_active_rate = round(($total_devices_num > 0 ? $total_recent_active_num*100/$total_devices_num : 0), 1);
+        $total_recent_use_rate = round(($total_devices_num > 0 ? $total_recent_use_num*100/$total_devices_num : 0), 1);
+
         if($lists){
             foreach ($lists as $key=>$item){
                 $roles = $item->roles;
@@ -615,14 +669,22 @@ class AdminController extends Controller
                     $lists[$key]->role_name = '';
                 }
 
-                $devices = Device::whereNull('deleted_at')->where('uid', $item->id)->get();
-                $lists[$key]->device_num = $devices ? count($devices) : 0;
-
+                $devices_num = Device::select(['id'])->whereNull('deleted_at')->where('uid', $item->id)->count();
+                $active_device_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->where('uid', $item->id)->count();
+                $recent_active_num = Device::select(['active_time'])->whereNull('deleted_at')->whereNotNull('active_time')->where('uid', $item->id)->where('active_time', '>=', date('Y-m-d', time()-24*60*60))->count();
+                $recent_use_num = Order::select(['device_id'])->distinct()->whereNull('deleted_at')->where('uid', $item->id)->where('pay_time', '>=', date('Y-m-d', time()-24*60*60))->where('status', self::PAYED)->where('money', '>=', 1)->count();
                 $orders = Order::whereNull('deleted_at')->where('uid', $item->id)->where('status', self::PAYED)->get();
+
+                $active_device_rate = round(($devices_num > 0 ? $active_device_num*100/$devices_num : 0), 1);
+                $recent_active_rate = round(($devices_num > 0 ? $recent_active_num*100/$devices_num : 0), 1);
+                $recent_use_rate = round(($devices_num > 0 ? $recent_use_num*100/$devices_num : 0), 1);
+
+                $operate_money = 0;
                 $clear_money = 0;
                 $unclear_money = 0;
                 $freeze_money = 0;
                 foreach ($orders as $order) {
+                    $operate_money = $operate_money + $order['money'];
                     if($order['cash_status'] == 0){
                         $unclear_money = $unclear_money + $order['money'];
                     }
@@ -633,14 +695,26 @@ class AdminController extends Controller
                         $clear_money = $clear_money + $order['money'];
                     }
                 }
+                $lists[$key]->operate_money = $operate_money;
                 $lists[$key]->clear_money = $clear_money;
                 $lists[$key]->unclear_money = $unclear_money;
                 $lists[$key]->freeze_money = $freeze_money;
+                $lists[$key]->device_num = $devices_num;
+                $lists[$key]->active_num = $active_device_num;
+                $lists[$key]->active_device_rate = $active_device_rate;
+                $lists[$key]->recent_active_rate = $recent_active_rate;
+                $lists[$key]->recent_use_rate = $recent_use_rate;
             }
 
             $res = array(
                 'data'=>$lists,
-                'total'=>count($total)
+                'total'=>count($total),
+                'all_money' => $all_money,
+                'total_devices_num' => $total_devices_num,
+                'total_active_device_num' => $total_active_device_num,
+                'total_active_device_rate' => $total_active_device_rate,
+                'total_recent_active_rate' => $total_recent_active_rate,
+                'total_recent_use_rate' => $total_recent_use_rate
             );
             return UtilService::format_data(self::AJAX_SUCCESS, '获取成功', $res);
         }

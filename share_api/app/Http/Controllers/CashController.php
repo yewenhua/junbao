@@ -37,7 +37,7 @@ class CashController extends Controller
         $roles = $user->roles;
         $flag = false;
         foreach ($roles as $role){
-            if($role->name == '管理员'){
+            if($role->name == '管理员' || $role->name == '财务'){
                 $flag = true;
                 break;
             }
@@ -131,14 +131,14 @@ class CashController extends Controller
         }
         else{
             $pids = array();
-            $all = User::whereNull('deleted_at')->get();
+            $all = User::select(['id'])->whereNull('deleted_at')->get();
             foreach ($all as $u){
                 $pids[] = $u->id;
             }
         }
 
         $lists = DB::table('orders')
-            ->select('*')
+            ->select(['cash_status', 'money'])
             ->where('status', self::PAYED)
             ->whereIn('uid', $pids)
             ->orderBy('id', 'desc')
@@ -156,6 +156,9 @@ class CashController extends Controller
 
             if($uid != 'all') {
                 $rest_money = $rest_money * $discount->value * 0.01;
+                if(strpos($rest_money, '.') !== false){
+                    $rest_money = round($rest_money, 2);
+                }
             }
         }
 
@@ -165,7 +168,7 @@ class CashController extends Controller
 
         $freeze_money = $freeze ? $freeze['money'] : 0;
 
-        $take = Cash::whereIn('uid', $pids)
+        $take = Cash::select(['money'])->whereIn('uid', $pids)
             ->where('status', self::AGREED)
             ->get();
 
@@ -176,53 +179,59 @@ class CashController extends Controller
             }
         }
 
-        return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', array("freeze_money"=>$freeze_money, "rest_money"=>$rest_money, "take_money"=>$take_money, "sale_money"=>$sale_money));
+        return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', array("freeze_money"=>$freeze_money, "rest_money"=>round($rest_money, 2), "take_money"=>$take_money, "sale_money"=>round($sale_money, 2)));
     }
 
     public function takecash(Request $request){
         $user = JWTAuth::parseToken()->authenticate();
-        $discount = Discount::whereNull('deleted_at')->where('uid', $user->id)->first();
-        if(!$discount){
-            $discount = Discount::whereNull('deleted_at')->where('uid', 0)->first();
-        }
+        $pids = $this->pids($user->id);
+        $freeze = Cash::whereIn('uid', $pids)->where('status', self::NO_CHECK)->first();
+        if(!$freeze) {
+            $discount = Discount::whereNull('deleted_at')->where('uid', $user->id)->first();
+            if (!$discount) {
+                $discount = Discount::whereNull('deleted_at')->where('uid', 0)->first();
+            }
 
-        DB::beginTransaction();
-        try {
-            $deadline = date('Y-m-d H:i:s');
-            $obj = DB::table('orders')->select(DB::raw('SUM(orders.money) as total_money'))->where('created_at', '<=', $deadline)->where('uid', $user->id)->where('cash_status', self::NO_CHECK)->first();
-            $money = $obj ? $obj->total_money : '0';
-            if($money > 0 && $discount) {
+            DB::beginTransaction();
+            try {
                 $ids = $this->pids($user->id);
-                $money = $money * $discount->value * 0.01;
-                DB::table('orders')->whereIn('uid', $ids)->where('cash_status', self::NO_CHECK)->where('created_at', '<=', $deadline)->update([
-                    'cash_status' => self::FREEZE
-                ]);
+                $deadline = date('Y-m-d H:i:s');
+                $obj = DB::table('orders')->select(DB::raw('SUM(orders.money) as total_money'))->where('created_at', '<=', $deadline)->whereIn('uid', $ids)->where('status', self::PAYED)->where('cash_status', self::NO_CHECK)->first();
+                $money = $obj ? $obj->total_money : '0';
+                if ($money > 0 && $discount) {
+                    $money = $money * $discount->value * 0.01;
+                    DB::table('orders')->whereIn('uid', $ids)->where('cash_status', self::NO_CHECK)->where('status', self::PAYED)->where('created_at', '<=', $deadline)->update([
+                        'cash_status' => self::FREEZE
+                    ]);
 
-                DB::table('cash')->insert([
-                    "money" => $money,
-                    'uid' => $user->id,
-                    "status" => self::NO_CHECK,
-                    "created_at" => date('Y-m-d H:i:s'),
-                    "updated_at" => date('Y-m-d H:i:s')
-                ]);
+                    DB::table('cash')->insert([
+                        "money" => $money,
+                        'uid' => $user->id,
+                        "status" => self::NO_CHECK,
+                        "created_at" => date('Y-m-d H:i:s'),
+                        "updated_at" => date('Y-m-d H:i:s')
+                    ]);
 
-                DB::commit();
+                    DB::commit();
 
-                $log = array(
-                    'money'=>$money,
-                    'uid'=>$user->id
-                );
-                Log::info('takecash success:' . var_export($log, true));
-                return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $log);
-            }
-            else{
+                    $log = array(
+                        'money' => $money,
+                        'uid' => $user->id
+                    );
+                    Log::info('takecash success:' . var_export($log, true));
+                    return UtilService::format_data(self::AJAX_SUCCESS, '操作成功', $log);
+                } else {
+                    DB::rollback();
+                    return UtilService::format_data(self::AJAX_FAIL, '没有余额', '');
+                }
+            } catch (QueryException $ex) {
                 DB::rollback();
-                return UtilService::format_data(self::AJAX_FAIL, '没有余额', '');
+                Log::info('takecash fail:' . var_export($log, true));
+                return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
             }
-        }catch(QueryException $ex) {
-            DB::rollback();
-            Log::info('takecash fail:' . var_export($log, true));
-            return UtilService::format_data(self::AJAX_FAIL, '操作失败', '');
+        }
+        else{
+            return UtilService::format_data(self::AJAX_FAIL, '您还有未审核的提现', '');
         }
     }
 
@@ -263,12 +272,14 @@ class CashController extends Controller
         DB::beginTransaction();
         try {
             $pids = $this->pids($uid);
-            DB::table('orders')->where('cash_status', self::FREEZE)->whereIn('uid', $pids)->update([
-                'cash_status' => $order_cash_status
+            DB::table('orders')->where('status', self::PAYED)->where('cash_status', self::FREEZE)->whereIn('uid', $pids)->update([
+                'cash_status' => $order_cash_status,
+                'updated_at' => date('Y-m-d H:i:s')
             ]);
 
             DB::table('cash')->where('id', $id)->update([
-                'status' => $cash_status
+                'status' => $cash_status,
+                'updated_at' => date('Y-m-d H:i:s')
             ]);
 
             DB::commit();
@@ -331,6 +342,10 @@ class CashController extends Controller
                         break;
                     }
                 }
+            }
+
+            foreach ($data as $key=>$val) {
+                $data[$key] = round($val, 2);
             }
             return UtilService::format_data(self::AJAX_SUCCESS, '获取成功', $data);
         }

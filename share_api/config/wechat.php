@@ -11,9 +11,9 @@ return [
     'wechat_menu' => array(
         'button'=>array(
             array(
-                "type"=>"view",
-                "name"=>"历史消息",
-                "url"=> "https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=MzU3OTY4NDc4Mg==&scene=126#wechat_redirect"
+                "type"=>"click",
+                "name"=>"使用帮助",
+                "key"=> "V1004_HELP"
             ),
             array(
                 "type"=>"scancode_push",

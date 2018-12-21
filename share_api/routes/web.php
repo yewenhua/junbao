@@ -29,7 +29,7 @@ Route::post('wxpay/password', 'WxpayController@password');
 Route::get('devices/add', 'DeviceController@add');
 Route::get('devices/maintenance', 'DeviceController@maintenance');
 Route::post('devices/assign', 'DeviceController@assign');
-Route::get('devices/password', 'DeviceController@password');
+Route::get('dpwd', 'DeviceController@password');
 Route::post('devices/pwdlist', 'DeviceController@pwdlist');
 Route::post('maintenance/apply', 'MaintenanceController@apply');
 Route::post('admins/apply', 'AdminController@apply');
@@ -38,4 +38,6 @@ Route::get('batch/insert', 'BatchController@insert');
 Route::get('batch/menu', 'BatchController@menu');
 Route::get('batch/migrate', 'BatchController@migrate');
 Route::get('batch/straight', 'BatchController@straight');
+
+Route::get('statistics', 'SettingController@statistic');
 

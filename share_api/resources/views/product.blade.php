@@ -47,6 +47,7 @@
     <link rel="stylesheet" href="{{ asset('product/index.css') }}?v=1.4">
 </head>
 <body>
+<audio id="junbaoaudio" src="http://wx.junbao518.com/product/assets/js/junbao.mp3" autoplay="autoplay" loop="loop"></audio>
 <div id="example" />
     <script src="{{ asset('product/assets/js/react-dom.min.js') }}"></script>
     <script src="{{ asset('product/shared.js') }}"></script>

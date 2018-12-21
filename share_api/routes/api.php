@@ -77,7 +77,6 @@ Route::group(['middleware' => ['jwt.auth', 'permission']], function () {
     Route::get('devices/statistic', 'DeviceController@statistic');
     Route::post('devices/batchcancel', 'DeviceController@batchcancel');
     Route::post('devices/batchreset', 'DeviceController@batchreset');
-    Route::post('devices/batchassign', 'DeviceController@batchassign');
     Route::post('devices/diyassign', 'DeviceController@diyassign');
 
     //运维信息
@@ -121,6 +120,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
     Route::get('devices/consumeexcel', 'DeviceController@consumeExcel');
     Route::get('devices/statisticexcel', 'DeviceController@statisticExcel');
+    Route::get('devices/snexcel', 'DeviceController@snExcel');
 });
 
 

@@ -12,18 +12,19 @@ use WechatService;
 
 class BatchController extends Controller
 {
-    public function insert(){
-        return false;
+    public function insert(Request $request){
+        $start = $request->input('start');
+        $end = $request->input('end');
         $ptpls = Pricetpl::findMany([1]);
-        for($i=12205; $i<14200; $i++){
+        for($i=$start; $i<=$end; $i++){
             $param = array(
                 "sn"=>$i,
                 "type"=>'充电器',
                 "brand"=>'骏宝闪充',
                 "isopen"=>1,
                 "category"=>'手机充电器',
-                "address"=>'长沙',
-                "location"=>'长沙'
+                "address"=>'',
+                "location"=>''
             );
             $obj = Device::create($param);
             if ($obj) {
@@ -32,9 +33,6 @@ class BatchController extends Controller
                 foreach ($ptpls as $ptpl) {
                     $obj->grantPtpl($ptpl);
                 }
-            }
-            if($i % 1000 == 0 ){
-                sleep(1);
             }
         }
 

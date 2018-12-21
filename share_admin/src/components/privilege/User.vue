@@ -39,6 +39,7 @@
                             :index="indexMethod">
                     </el-table-column>
                     <el-table-column
+                            fixed
                             prop="role_name"
                             label="角色"
                             v-if="hasPermission('admin/user', 'add') && hasPermission('admin/user', 'delete') && hasPermission('admin/user', 'update') && hasPermission('admin/user', 'read')"
@@ -48,6 +49,7 @@
                         </template>
                     </el-table-column>
                     <el-table-column
+                            fixed
                             prop="name"
                             width="100"
                             class-name="wrap-hundred"
@@ -79,10 +81,11 @@
                             label="维护人员">
                     </el-table-column>
                     <el-table-column
-                            prop="discount"
-                            label="分成比列">
+                            prop="created_at"
+                            width="100"
+                            label="投放时间">
                         <template slot-scope="scope">
-                            <div>{{scope.row.discount + '%'}}</div>
+                            <div>{{scope.row.created_at.substring(0,10)}}</div>
                         </template>
                     </el-table-column>
                     <el-table-column
@@ -91,14 +94,57 @@
                             label="设备数">
                     </el-table-column>
                     <el-table-column
-                            prop="clear_money"
-                            label="已结算（元）">
+                            prop="active_num"
+                            width="65"
+                            label="激活数">
+                    </el-table-column>
+                    <el-table-column
+                            prop="active_device_rate"
+                            width="65"
+                            label="激活率">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.active_device_rate + '%'}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="recent_active_rate"
+                            width="65"
+                            label="近一天激活率">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.recent_active_rate + '%'}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="recent_use_rate"
+                            width="65"
+                            label="近一天使用率">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.recent_use_rate + '%'}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="operate_money"
+                            label="营业额（元）">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.operate_money}}</div>
+                        </template>
                     </el-table-column>
                     <el-table-column
                             prop="unclear_money"
                             label="未结算（元）">
                         <template slot-scope="scope">
                             <div>{{scope.row.unclear_money + scope.row.freeze_money}}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column
+                            prop="clear_money"
+                            label="已结算（元）">
+                    </el-table-column>
+                    <el-table-column
+                            prop="discount"
+                            label="分成比列">
+                        <template slot-scope="scope">
+                            <div>{{scope.row.discount + '%'}}</div>
                         </template>
                     </el-table-column>
                     <el-table-column
@@ -435,11 +481,16 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if(response.data.code == 0){
                             that.tableData = response.data.data.data;
                             that.total = response.data.data.total;
                         }
-                        that.loading = false;
+                        else{
+                            Message.warning({
+                                message: response.data.message
+                            });
+                        }
                     })
                     .catch(function (error) {
                         Message.error({
@@ -736,11 +787,11 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.roleOptions = response.data.data;
                             that.users();
                         }
-                        that.loading = false;
                     })
                     .catch(function (error) {
                         Message.error({

@@ -4,7 +4,7 @@
         <div class="pageWrapper" v-loading="loading">
             <div class="lookWrapper">
                 <div class="searchWrapper">
-                    <el-select v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
+                    <el-select filterable v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
                         <el-option key="全部用户" label="全部用户" value="all" v-if="usertype=='admin'"></el-option>
                         <el-option
                                 v-for="item in agents"
@@ -220,6 +220,7 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.hasData = true;
                             that.statistic = response.data.data;
@@ -232,7 +233,6 @@
                             that.optionColumn.xAxis.categories = categories;
                             that.optionColumn.series[0].data = data;
                         }
-                        that.loading = false;
                     })
                     .catch(function (error) {
                         Message.error({
@@ -265,6 +265,7 @@
                         }
                     })
                     .then(function (response) {
+                        that.loading = false;
                         if (response.data.code == 0) {
                             that.agents = response.data.data.list;
                             that.usertype = response.data.data.type;
@@ -274,7 +275,6 @@
                             }
                             that.getStatistic();
                         }
-                        that.loading = false;
                     })
                     .catch(function (error) {
                         Message.error({

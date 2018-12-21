@@ -73,4 +73,9 @@ class SettingController extends Controller
             return UtilService::format_data(self::AJAX_FAIL, '没有权限', '');
         }
     }
+
+    public function statistic(Request $request){
+        $data = array();
+        return view('statistic', $data);
+    }
 }

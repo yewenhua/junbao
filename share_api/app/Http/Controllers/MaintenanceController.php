@@ -232,7 +232,7 @@ class MaintenanceController extends Controller
         if($lists){
             foreach ($lists as $key=>$item){
                 $user = User::whereNull('deleted_at')->where('id', $item->uid)->first();
-                $lists[$key]->username = $user->name;
+                $lists[$key]->username = $user ? $user->name : '';
             }
 
             $res = array(

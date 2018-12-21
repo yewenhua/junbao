@@ -4,7 +4,7 @@
         <div class="pageWrapper">
             <div class="lookWrapper">
                 <div class="searchWrapper">
-                    <el-select v-model="searchUid" placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
+                    <el-select v-model="searchUid" filterable placeholder="代理商" @change="chgUid" size="medium" style="width: 130px;">
                         <el-option key="全部用户" label="全部用户" value="all" v-if="usertype=='admin'"></el-option>
                         <el-option
                                 v-for="item in agents"

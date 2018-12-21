@@ -144,11 +144,21 @@ class WxpayController extends Controller
                         $new_sn = $lastPassword['sn'] + 1;
                     }
                     else{
-                        $new_sn = 1;
+                        if($device['sn'] >= 20000){
+                            $new_sn = 3;
+                        }
+                        else{
+                            $new_sn = 1;
+                        }
                     }
                 }
                 else{
-                    $new_sn = 1;
+                    if($device['sn'] >= 20000){
+                        $new_sn = 3;
+                    }
+                    else{
+                        $new_sn = 1;
+                    }
                 }
 
                 $newPassword = $this->generatePwd($device['sn'], $new_sn);
